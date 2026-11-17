@@ -1,7 +1,7 @@
 ## Cybersecurity Hands-on Labs
 
 ### SIEM & Security Monitoring
-- [Lab 01: Wazuh SIEM Installation and Troubleshooting](labs/01-wazuh-installation.md)
+- Lab 01: Wazuh SIEM Installation and Troubleshooting(labs/01-wazuh-installation.md)
 
 ## Lab Overview
 
