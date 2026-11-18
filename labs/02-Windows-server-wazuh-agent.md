@@ -16,7 +16,7 @@ Add a Windows Server 2022 endpoint to an existing Wazuh SIEM lab in VMware Works
 |---|---|
 | Hypervisor | VMware Workstation Pro |
 | Wazuh server OS | Rocky Linux 9.5 |
-| Wazuh Manager IP | `192.168.101.129` |
+| Wazuh Manager IP | `208.8.8.128` |
 | Monitored endpoint | Windows Server 2022 (Desktop Experience) |
 | Windows Server IP | `169.254.50.173` |
 | Network | VMware NAT / VMnet8, `192.168.17.0/24` |
@@ -39,9 +39,9 @@ ipconfig
 **Command: Check connectivity to the manager**
 
 ```powershell
-ping 192.168.101.129
-Test-NetConnection 192.168.101.129 -Port 1514
-Test-NetConnection 192.168.101.129 -Port 1515
+ping 208.8.8.128
+Test-NetConnection 208.8.8.128 -Port 1514
+Test-NetConnection 208.8.8.128 -Port 1515
 ```
 
 *Purpose:* Separates basic IP reachability from TCP agent communication and enrollment connectivity.
@@ -109,7 +109,7 @@ The Windows Server and Wazuh Manager were on the same VMware NAT subnet.
 On **Windows Server PowerShell**:
 
 ```powershell
-ping 192.168.101.129
+ping 208.8.8.128
 ```
 
 **Observed result:** Four successful replies. Basic IP connectivity between the VMs worked.
@@ -119,8 +119,8 @@ ping 192.168.101.129
 On **Windows Server PowerShell**:
 
 ```powershell
-Test-NetConnection 192.168.101.129 -Port 1514
-Test-NetConnection 192.168.101.129 -Port 1515
+Test-NetConnection 208.8.8.128 -Port 1514
+Test-NetConnection 208.8.8.128 -Port 1515
 ```
 
 | Port | Purpose | Initial test | After firewall change |
@@ -160,7 +160,7 @@ firewall-cmd --reload
 Then retest port 1514 from Windows Server:
 
 ```powershell
-Test-NetConnection 192.168.101.129 -Port 1514
+Test-NetConnection 208.8.8.128 -Port 1514
 ```
 
 **Observed result:** `TcpTestSucceeded : True`.
@@ -175,7 +175,7 @@ firewall-cmd --reload
 Retest from Windows Server:
 
 ```powershell
-Test-NetConnection 192.168.101.129 -Port 1515
+Test-NetConnection 208.8.8.128 -Port 1515
 ```
 
 **Observed result:** `TcpTestSucceeded : True`.
@@ -190,11 +190,11 @@ firewall-cmd --zone=public --list-ports
 
 ## 7. Generate the Windows agent installation command
 
-In the Wazuh dashboard (`https://192.168.101.129`):
+In the Wazuh dashboard (`https://208.8.8.128`):
 
 1. Open **Deploy new agent**.
 2. Choose **Windows > MSI 32/64 bits**.
-3. Enter manager address `192.168.101.129`.
+3. Enter manager address `208.8.8.128`.
 4. Set the unique agent name to `WinServer-Lab`.
 5. Leave the agent group at `default`.
 6. Copy the generated PowerShell installation command.
@@ -205,7 +205,7 @@ The lab dashboard generated an MSI download for **Wazuh agent 4.12.0-1** from `p
 
 ```powershell
 Invoke-WebRequest -Uri 'https://packages.wazuh.com/4.x/windows/wazuh-agent-4.12.0-1.msi' -OutFile "$env:TEMP\wazuh-agent.msi"
-msiexec.exe /i "$env:TEMP\wazuh-agent.msi" /q WAZUH_MANAGER="192.168.101.129" WAZUH_AGENT_NAME="WinServer-Lab"
+msiexec.exe /i "$env:TEMP\wazuh-agent.msi" /q WAZUH_MANAGER="208.8.8.128" WAZUH_AGENT_NAME="WinServer-Lab"
 ```
 
 `/q` requests a quiet MSI installation, so there may be no visible installer window. Allow the process to complete before checking the service.
