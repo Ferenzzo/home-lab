@@ -39,7 +39,7 @@ ip -4 addr
 
 Displays IPv4 addresses assigned to network interfaces.
 
-**Result:** Rocky Linux 9.5 with IP `192.168.17.130`.
+**Result:** Rocky Linux 9.5 with IP `192.168.101.129`.
 
 ## 2. Check Wazuh Services
 
