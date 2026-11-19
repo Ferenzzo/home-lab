@@ -1,6 +1,6 @@
 # Lab 03 — Investigating a Failed Windows Login with Wazuh
 
-**Date:** November 15, 2026  
+**Date:** November 19, 2026  
 **Environment:** VMware Workstation Pro, Rocky Linux 9.5 Wazuh manager (`208.8.8.128`), Windows Server 2022 Wazuh agent (`WinServer-Lab`, `169.254.50.173`)  
 **Status:** Completed — alert detected and investigated
 
