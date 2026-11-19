@@ -1,7 +1,7 @@
 # Lab 03 — Investigating a Failed Windows Login with Wazuh
 
 **Date:** November 15, 2026  
-**Environment:** VMware Workstation Pro, Rocky Linux 9.5 Wazuh manager (`192.168.17.130`), Windows Server 2022 Wazuh agent (`Win-serverlab`, `192.168.17.134`)  
+**Environment:** VMware Workstation Pro, Rocky Linux 9.5 Wazuh manager (`208.8.8.128`), Windows Server 2022 Wazuh agent (`WinServer-Lab`, `169.254.50.173`)  
 **Status:** Completed — alert detected and investigated
 
 ## Objective
@@ -68,7 +68,7 @@ This confirmed that Windows rejected the attempted login.
 
 ## Step 3 — Find the event in Wazuh
 
-1. Open the Wazuh dashboard: `https://192.168.17.130`.
+1. Open the Wazuh dashboard: `https://208.8.8.128`.
 2. Navigate to **Threat Hunting → Events** (navigation may vary by version).
 3. Select a time range that includes the test, such as **Last 15 minutes** or **Last 1 hour**.
 4. Search for:
@@ -89,7 +89,7 @@ The following values were verified in the Wazuh event details:
 | `rule.description` | `Logon Failure - Unknown user or bad password` |
 | `rule.level` | `5` |
 | `data.win.eventdata.targetUserName` | `Administrator` |
-| Wazuh agent | `Win-serverlab` |
+| Wazuh agent | `WinServer-Lab` |
 
 **Interpretation:** Wazuh collected the failed-authentication event and classified it with a level-5 rule. A single level-5 alert does not, by itself, establish an attack.
 
