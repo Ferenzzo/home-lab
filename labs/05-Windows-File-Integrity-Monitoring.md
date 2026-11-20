@@ -1,5 +1,10 @@
 # Lab 05 — Windows File Integrity Monitoring (FIM) with Wazuh
 
+**Date:** November 20, 2026  
+**Environment:** Windows 11 host endpoint | Wazuh 4.12.0 | Rocky Linux Wazuh Manager  
+**Type:** Authorized home-lab investigation  
+**Outcome:** Configured real-time FIM monitoring for `C:\\FIM-Lab` and confirmed file creation, modification (including hash changes), and deletion events in Wazuh Threat Hunting. Also investigated and recovered from a full Manager filesystem.
+
 ## Objective
 
 Configure the Wazuh agent on a Windows 11 endpoint to monitor a dedicated test directory in real time and investigate file creation, modification, and deletion events in the Wazuh Dashboard.
