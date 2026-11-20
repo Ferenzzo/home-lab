@@ -1,179 +1,156 @@
-# Lab 04 — Wazuh File Integrity Monitoring (FIM)
+# Lab 04 — Windows Authentication Event Investigation with Wazuh
 
-**Date:** November 16, 2026  
-**Environment:** VMware Workstation Pro | Rocky Linux 9.5 | Wazuh 4.12.0 | Windows Server 2022  
-**Type:** Authorized home-lab exercise  
-**Outcome:** Successfully detected file creation, modification, and deletion.
+**Date:** November 20, 2026  
+**Environment:** Windows 11 host endpoint | Wazuh 4.12.0 | Rocky Linux Wazuh Manager  
+**Type:** Authorized home-lab investigation  
+**Outcome:** Located and examined Windows failed-logon (4625), privileged-logon, and successful service-logon events in Wazuh Threat Hunting.
 
 ## Objective
 
-Configure real-time File Integrity Monitoring (FIM) on a Windows Server endpoint, verify that alerts reach the Wazuh dashboard, and practice evidence-driven troubleshooting when the monitoring pipeline fails.
+Practice SOC-style event triage using Wazuh: locate a failed logon, inspect the underlying Windows event fields, review surrounding authentication/privilege activity, and make cautious preliminary classifications based on evidence.
 
 ## Lab environment
 
-| Component | Role | Lab address |
+| Component | Role | Details |
 |---|---|---|
-| Rocky Linux VM | Wazuh manager | `192.168.17.130` |
-| Windows Server 2022 VM | Wazuh agent endpoint | `192.168.17.134` |
-| Wazuh agent ID | Active endpoint registration | `002` |
-| Test directory | Monitored folder | `C:\WazuhLab` |
+| Rocky Linux VM (WAZUHv2) | Wazuh Manager | Manager service verified active |
+| Wazuh Manager address | Agent destination | `208.8.8.128` (observed during lab; DHCP address may change) |
+| Windows 11 host PC | Monitored endpoint | Existing Wazuh Agent connection |
+| Agent name in dashboard | Endpoint label | `WinServer-Lab` (label is misleading; endpoint is the real Windows 11 host) |
+| Agent version | Endpoint agent | Wazuh 4.12.0 |
 
-> The addresses above belong to an isolated VMware home-lab network. No production systems were involved.
+> The endpoint investigated was the user's real Windows 11 PC, not the Windows Server VM. The Windows Server VM did not have a Wazuh agent installed during this exercise.
 
-## Command reference — commands used and why
+## Procedure
 
-The commands below are highlighted for reproducibility. Each explanation states what was checked or changed during the lab.
+1. Verified that the Wazuh Manager service was `active (running)` on Rocky Linux.
+2. Confirmed the manager address with `hostname -I`: `208.8.8.128`.
+3. Used the existing monitored Windows 11 endpoint.
+4. Locked the PC and performed one intentional incorrect-password attempt, then logged in successfully.
+5. Opened Wazuh Threat Hunting → Events.
+6. Searched for Windows Event ID 4625 using:
 
-**Command: Restart the Windows Wazuh agent after saving FIM configuration**
-
-```powershell
-Restart-Service -Name WazuhSvc
+```
+data.win.system.eventID:4625
 ```
 
-*Purpose:* Reloads the Windows agent configuration so the real-time monitoring entry can take effect.
+7. Located failed-logon alerts and inspected the most recent available event details.
+8. Reviewed other events in a narrowed time window, including a special-privileges event and a successful service-logon event.
 
-**Command: Check whether the Wazuh manager service is running**
+## Failed-logon event analysis — Event ID 4625
 
-```bash
-systemctl status wazuh-manager
-```
+Wazuh displayed a failed-logon alert (Rule ID 60122, Level 5) with the description **Logon Failure – Unknown user or bad password**.
 
-*Purpose:* Checks the Linux service state; an active service alone does not guarantee that TCP 1514 is listening.
+Observed raw event fields:
 
-**Command: Inspect the agent communication listener**
+| Field | Value |
+|---|---|
+| Event ID | 4625 |
+| Subject SID | `S-1-5-18` |
+| Subject account | `DEOCESCO$` |
+| Subject domain | `WORKGROUP` |
+| Subject logon ID | `0x3E7` |
+| Logon Type | `2` |
+| Failed target account | `-` |
+| Failed target SID | `S-1-0-0` |
+| Failure reason | An error occurred during logon |
+| Status | `0xC000006D` |
+| SubStatus | `0xC0000380` |
+| Caller process ID | `0x91c` |
+| Caller process | `C:\Windows\System32\svchost.exe` |
+| Source address | `127.0.0.1` |
+| Source port | `0` |
+| Logon process | `User32` |
+| Authentication package | `Negotiate` |
 
-```bash
-ss -lntp | grep 1514
-```
+### Interpretation
 
-*Purpose:* Checks for a TCP listener on port 1514, used for normal Wazuh agent communication.
+- Event ID 4625 confirms that a logon attempt failed.
+- Logon Type 2 is an interactive logon type.
+- The source address `127.0.0.1` is the loopback address and indicates a local context, not an external IP address.
+- The failed target account fields were blank/unknown in this record.
+- `svchost.exe` is a legitimate Windows executable, but its presence alone does not prove an event is benign.
+- Status `0xC000006D` is a logon-failure status. The SubStatus was recorded as `0xC0000380`; its precise interpretation was not independently verified in this exercise.
 
-**Command: Inspect Wazuh listening sockets**
+### Preliminary classification
 
-```bash
-ss -lntup | grep wazuh
-```
+**Likely benign / consistent with local test activity, but not conclusively correlated.** The event's local loopback context and the lab activity make it plausible that it was related to the test. However, the event did not identify the failed target account, and the details alone do not conclusively prove that this exact event was caused by the intentionally entered incorrect password.
 
-*Purpose:* Helps distinguish the enrollment listener on TCP 1515 from the normal agent communication listener on TCP 1514.
+## Additional event reviewed — Special privileges assigned to new logon
 
-**Command: Check the remoted process**
+Observed details:
 
-```bash
-ps -ef | grep '[w]azuh-remoted'
-```
+| Field | Value |
+|---|---|
+| Account | `deocescoferenzzo.ramos@gmail.com` |
+| Domain | `MicrosoftAccount` |
+| Logon ID | `0xDAD3DB` |
+| Event description | Special privileges assigned to new logon |
 
-*Purpose:* Checks whether the process responsible for agent communications is actually running.
+Privileges listed in the event:
 
-**Command: Stop and restart the manager during recovery**
+- `SeSecurityPrivilege`
+- `SeTakeOwnershipPrivilege`
+- `SeLoadDriverPrivilege`
+- `SeBackupPrivilege`
+- `SeRestorePrivilege`
+- `SeDebugPrivilege`
+- `SeSystemEnvironmentPrivilege`
+- `SeImpersonatePrivilege`
+- `SeDelegateSessionUserImpersonatePrivilege`
 
-```bash
-systemctl stop wazuh-manager
-systemctl start wazuh-manager
-```
+These privileges are sensitive and can be abused in some circumstances, but their presence in an event is not proof of misuse. This event's Logon ID differed from the 4625 event's subject Logon ID, so a direct session correlation was not established.
 
-*Purpose:* Restarts the manager components after verifying the service state and investigating the suspected stale PID record. No unrelated process or PID file was manually removed.
+**Preliminary classification:** Likely benign administrative logon context, pending further verification if this were a real incident.
 
-## Configuration
+## Additional event reviewed — Successful service logon
 
-1. Backed up the Windows agent configuration file `C:\Program Files (x86)\ossec-agent\ossec.conf`.
-2. Verified that the agent's manager address was `192.168.17.130`.
-3. Created the isolated test directory `C:\WazuhLab`.
-4. Added the following line inside the existing `<syscheck>` block without removing the other entries:
+Observed event details:
 
-```xml
-<directories realtime="yes">C:\WazuhLab</directories>
-```
+| Field | Value |
+|---|---|
+| New logon account | `SYSTEM` |
+| Domain | `NT AUTHORITY` |
+| SID | `S-1-5-18` |
+| Logon ID | `0x3E7` |
+| Logon Type | `5` (Service) |
+| Elevated token | Yes |
+| Process | `C:\Windows\System32\services.exe` |
+| Process ID | `0x4b0` |
+| Logon process | `Advapi` |
+| Authentication package | `Negotiate` |
 
-5. Confirmed that the saved file contained the rule, then restarted the Windows agent:
+### Interpretation
 
-```powershell
-Restart-Service -Name WazuhSvc
-```
+Logon Type 5 is a service logon. `NT AUTHORITY\SYSTEM` is a built-in Windows system identity, and `services.exe` is the Service Control Manager executable. These fields are consistent with normal Windows service activity. This event alone does not indicate malicious behavior.
 
-The existing `<frequency>43200</frequency>` setting represents a scheduled scan interval of 12 hours; the new directory rule requests real-time monitoring for the test folder.
+**Preliminary classification:** Likely benign service activity.
 
-## Troubleshooting: Agent disconnected
+## SOC analyst assessment
 
-During setup, the Windows agent disconnected from the manager. I used logs and service/network checks rather than immediately reinstalling the software.
-
-### Evidence and investigation
-
-- Windows agent log reported `ERROR (1216)`: connection to `192.168.17.130:1514/tcp` was actively refused.
-- `systemctl status wazuh-manager` reported the manager service active, but `ss -lntp | grep 1514` returned no listener.
-- Manager configuration included `<port>1514</port>` and `<protocol>tcp</protocol>`.
-- `ss -lntup | grep wazuh` showed `wazuh-authd` listening on TCP 1515 (enrollment), but not `wazuh-remoted` on TCP 1514 (normal agent communication).
-- `ps -ef | grep '[w]azuh-remoted'` found no running remoted process.
-- The manager startup journal reported `wazuh-remoted already running`.
-- A `wazuh-remoted-2038.pid` file referred to PID 2038, which was actually an `sd-pam` process. This supported a **suspected stale PID record**, not a confirmed sole root cause.
-
-### Recovery
-
-Stopped the Wazuh manager using `systemctl stop wazuh-manager`, verified the service was inactive, and checked remaining processes. The separate dashboard and indexer services were still running, but manager components were no longer present. The suspected stale remoted PID file had disappeared after the manager stop; **no PID file was manually deleted and the unrelated `sd-pam` process was not terminated**.
-
-Started the manager again:
-
-```bash
-sudo systemctl start wazuh-manager
-sudo ss -lntp | grep 1514
-```
-
-The listener returned as `wazuh-remoted` on `0.0.0.0:1514`, and the Windows agent reconnected.
-
-### Agent registration observation
-
-The dashboard showed two registrations for the same lab endpoint:
-
-| ID | Name | Status during investigation |
+| Event | Evidence | Preliminary disposition |
 |---|---|---|
-| 001 | Win-serverlab | Disconnected |
-| 002 | WIN-E80G02SELAT | Active |
+| 4625 — Failed logon | Type 2, loopback `127.0.0.1`, unknown target, `svchost.exe` | Likely benign / consistent with test context; exact causation not proven |
+| Special privileges event | MicrosoftAccount and sensitive privileges listed | Likely benign context; direct correlation to 4625 not established |
+| Successful service logon | Type 5, SYSTEM, `services.exe` | Likely benign service activity |
 
-I verified that the Windows agent's `client.keys` began with ID `002` **without sharing its secret key**. FIM investigations therefore used agent `002`. The old registration was left untouched during this lab.
-
-### Missing monitoring rule
-
-Initial file-change tests produced no FIM events. Searching the active Windows `ossec.conf` for `WazuhLab` returned no matches, showing the test directory rule was absent from the configuration in use. After adding the rule, verifying it was saved, and restarting the agent, its operational log showed:
-
-```text
-Connected to the server ([192.168.17.130]:1514/tcp).
-FIM sync module started.
-Real-time file integrity monitoring started.
-```
-
-This reinforced the difference between **agent connectivity**, **FIM initialization**, and **confirmed coverage of a specific directory**.
-
-## Detection validation
-
-I generated authorized file activity in `C:\WazuhLab` and inspected **File Integrity Monitoring → Events** for agent `002`. The dashboard recorded these events for `C:\WazuhLab\sex.txt`:
-
-| Action | syscheck.event | Wazuh rule | Rule level | Rule description |
-|---|---|---|---|---|
-| Create file | `added` | 554 | 5 | File added to the system. |
-| Change file contents | `modified` | 550 | 7 | Integrity checksum changed. |
-| Delete file | `deleted` | 553 | 7 | File deleted. |
-
-**Result: 3/3 detection tests passed.** The modification alert indicated a change to the file's integrity checksum. Adjusting the dashboard time filter helped locate the events.
-
-## SOC Analyst interpretation
-
-The alerts accurately reported the file operations, but the activity was **authorized and benign** because I performed it as part of this test. A Wazuh severity level does not, by itself, prove malicious intent.
-
-In a production investigation involving an important deleted configuration file, my initial triage would be to validate the alert, identify the affected asset and file, correlate relevant account/process activity where available, check approved change or maintenance records, assess impact, and escalate according to incident-response procedures if suspicious.
+A severity level or alert title is not a verdict. In a real investigation, I would validate the asset and account, correlate events by time and logon ID where appropriate, review process context and frequency, look for repeated failures or a subsequent successful logon, and escalate if evidence indicates unauthorized activity.
 
 ## Skills practiced
 
-- Wazuh File Integrity Monitoring and real-time directory configuration
-- Windows PowerShell and agent operational log review
-- Linux systemd, journal, process, and socket inspection
-- TCP 1514 agent communication versus TCP 1515 enrollment
-- Troubleshooting a suspected stale process ID record
-- Verifying configuration persistence and post-change service health
-- SOC alert triage: separating true detections from malicious activity
+- Wazuh Threat Hunting and event filtering
+- Windows Security Event ID 4625 analysis
+- Reviewing raw Windows event fields
+- Understanding interactive (Type 2) and service (Type 5) logons
+- Interpreting local loopback context
+- Reviewing Windows privileged-logon events
+- Preliminary SOC classification and evidence-based reasoning
+- Distinguishing an alert from confirmed malicious activity
 
 ## Key takeaway
 
-**An active service is not proof that its network listener works; an active agent is not proof that a directory is monitored; and a detection alert is not proof of an attack.** Verify each stage with evidence.
+**Investigate the event details, not just the alert title.** Context, correlation, account identity, logon type, process, source address, and surrounding events are needed to assess whether activity is expected, suspicious, or requires further investigation.
 
 ---
 
-*Personal hands-on learning project. This documents a simulated home-lab exercise, not professional SOC employment.*
+*Personal hands-on home-lab exercise. This documents simulated/controlled learning activity, not professional SOC employment.*
