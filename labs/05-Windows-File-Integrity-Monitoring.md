@@ -374,18 +374,6 @@ This lab used a controlled test directory and deliberate file operations. The re
 - Avoid deleting Wazuh queue or database data without identifying the exact path and understanding the impact.
 - Alert severity alone is not a verdict; alerts require context and investigation.
 
-## 14. Evidence screenshots to attach
-
-Save screenshots in a dedicated evidence folder in the repository, if desired, and link them from this document:
-
-1. Windows agent configuration showing the `C:\\FIM-Lab` entry.
-2. Agent log showing the monitored path and real-time FIM initialization.
-3. Dashboard event showing file creation.
-4. Dashboard event showing file modification and hash changes.
-5. Dashboard event showing file deletion.
-6. Disk troubleshooting showing root filesystem space recovered.
-7. Wazuh Manager running and Windows agent Active after recovery.
-
 ---
 
 **Lab status: Completed.** Real-time FIM detection for file creation, modification, and deletion was demonstrated on the Windows 11 endpoint.
