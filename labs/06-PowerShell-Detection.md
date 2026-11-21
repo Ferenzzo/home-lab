@@ -1,60 +1,113 @@
-# Lab 05 — PowerShell Detection
+# Lab 06 — PowerShell Detection
 
 **Date:** November 21, 2026  
-**Environment:** Rocky Linux (Wazuh Manager 4.12.0) / Windows 11 Endpoint  
+**Environment:** Rocky Linux VM (Wazuh Manager) / Windows 11 Endpoint  
 **Type:** Security Monitoring / Windows Event Logging / SIEM  
-**Outcome:** PowerShell logging configured and locally verified; event visibility in Wazuh remains unconfirmed.
+**Outcome:** Script Block Logging and agent collection configured; local event generation and agent connectivity verified, but Event ID 4104 visibility in the Wazuh dashboard was not confirmed.
 
 ## Objective
 
-Configure Windows PowerShell Script Block Logging and forward PowerShell Operational logs to Wazuh to familiarize myself with monitoring PowerShell activity through a SIEM.
+Enable PowerShell Script Block Logging on Windows, configure the Wazuh agent to collect the PowerShell Operational log, generate harmless test activity, and investigate whether the events are visible in Wazuh.
 
-## Environment
+## Tools Used
 
-- **SIEM:** Wazuh
-- **Wazuh Manager:** Rocky Linux VM
-- **Endpoint:** Windows 11
-- **Log Source:** Microsoft-Windows-PowerShell/Operational
-- **Event ID:** 4104 — Script Block Logging
+- Wazuh Dashboard
+- Wazuh Manager (Rocky Linux)
+- Windows PowerShell
+- Windows Registry
+- Windows Event Viewer / PowerShell Operational event log
 
-## Activities Performed
+## Step-by-Step Procedure and Commands
 
-### 1. Verified Wazuh Services
+### 1. Verify the Wazuh Services
 
-Checked that the Wazuh Manager and Windows Agent services were running.
+**On Windows PowerShell (Run as Administrator):**
 
-- Wazuh Manager: Active
-- Wazuh Agent: Running
+```powershell
+Get-Service WazuhSvc
+```
 
-### 2. Enabled PowerShell Script Block Logging
+This checks the Windows Wazuh agent service status. The service was observed running.
 
-Configured the Windows Registry to enable PowerShell Script Block Logging.
+**On the Rocky Linux VM:**
 
-Registry path:
+```bash
+sudo systemctl status wazuh-manager
+```
 
-`HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging`
+This checks the Wazuh Manager service. The manager was observed active (running).
 
-Configured value:
+### 2. Enable PowerShell Script Block Logging
 
-- **Name:** EnableScriptBlockLogging
-- **Type:** DWORD
-- **Value:** 1
+**On Windows PowerShell (Run as Administrator):**
 
-Verified the registry configuration.
+Create the policy registry key if it does not already exist:
 
-### 3. Verified PowerShell Operational Logging
+```powershell
+New-Item -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging" -Force
+```
 
-Checked the Microsoft-Windows-PowerShell/Operational event log and confirmed that it was enabled.
+Enable Script Block Logging:
 
-Observed Event ID 4104 records generated locally, including PowerShell configuration commands.
+```powershell
+New-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging" -Name "EnableScriptBlockLogging" -Value 1 -PropertyType DWORD -Force
+```
 
-### 4. Configured Wazuh Event Collection
+Verify the configured value:
 
-Modified the Wazuh Windows Agent configuration file:
+```powershell
+Get-ItemProperty -Path "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging"
+```
 
-`C:\\Program Files (x86)\\ossec-agent\\ossec.conf`
+The **EnableScriptBlockLogging** DWORD was verified with a value of **1**.
 
-Added the following configuration:
+### 3. Check the PowerShell Operational Log
+
+**On Windows PowerShell:**
+
+```powershell
+Get-WinEvent -ListLog "Microsoft-Windows-PowerShell/Operational" | Select-Object LogName, IsEnabled, RecordCount
+```
+
+This checks whether the PowerShell Operational event log is enabled and reports its record count. The log was observed enabled.
+
+To inspect recent Event ID 4104 records:
+
+```powershell
+Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-PowerShell/Operational'; Id=4104} -MaxEvents 10 | Format-List TimeCreated, Id, Message
+```
+
+Event ID 4104 records were observed locally, including script blocks associated with configuration and verification commands.
+
+### 4. Back Up and Configure the Wazuh Agent
+
+**On Windows PowerShell (Run as Administrator):**
+
+The agent configuration file was located at:
+
+`C:\Program Files (x86)\ossec-agent\ossec.conf`
+
+Create a backup:
+
+```powershell
+Copy-Item "C:\Program Files (x86)\ossec-agent\ossec.conf" "C:\Program Files (x86)\ossec-agent\ossec.conf.bak"
+```
+
+Check whether a PowerShell Operational channel entry already exists:
+
+```powershell
+Select-String -Path "C:\Program Files (x86)\ossec-agent\ossec.conf" -Pattern "PowerShell/Operational"
+```
+
+No existing PowerShell Operational entry was found during the check.
+
+Open the configuration file for editing:
+
+```powershell
+notepad "C:\Program Files (x86)\ossec-agent\ossec.conf"
+```
+
+Inside the existing `<ossec_config>` section, add the following configuration:
 
 ```xml
 <localfile>
@@ -63,44 +116,109 @@ Added the following configuration:
 </localfile>
 ```
 
-Created a backup of the original configuration file before making changes.
+Save the file.
 
-Restarted the Wazuh Agent service after modifying the configuration.
+### 5. Restart and Verify the Wazuh Agent
 
-### 5. Verified Agent Connectivity
+**On Windows PowerShell (Run as Administrator):**
 
-Reviewed the Windows Agent logs and confirmed that the agent successfully connected to the Wazuh Manager.
+```powershell
+Restart-Service WazuhSvc
+```
 
-Observed log entries indicating:
+Verify the service:
 
-- PowerShell Operational event log analysis
-- Successful connection to the Wazuh Manager
+```powershell
+Get-Service WazuhSvc
+```
+
+The agent service was observed running after the restart.
+
+### 6. Generate Harmless PowerShell Test Activity
+
+**On Windows PowerShell:**
+
+Run a simple test command:
+
+```powershell
+Write-Output "SOC-LAB-POWERSHELL-TEST"
+```
+
+A test script was also created in the user's temporary directory:
+
+```powershell
+Set-Content -Path "$env:TEMP\SOC-Lab-Test.ps1" -Value 'Write-Output "SOC-LAB-4104-TEST"'
+```
+
+Execution policy was temporarily bypassed for the current PowerShell process only:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+The test script was executed:
+
+```powershell
+& "$env:TEMP\SOC-Lab-Test.ps1"
+```
+
+The script printed its test string in the PowerShell session. This was a harmless test of script execution; the exact test string was not confirmed in the local Event ID 4104 results.
+
+### 7. Inspect Recent PowerShell Script Block Events
+
+**On Windows PowerShell:**
+
+```powershell
+Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-PowerShell/Operational'; Id=4104} -MaxEvents 20 | Format-List TimeCreated, Id, Message
+```
+
+The returned records included Script Block Logging activity, such as commands used during configuration and verification. The specific test string was not confirmed in the event output.
+
+### 8. Verify Agent Connectivity and Collection Activity
+
+The Windows Wazuh agent log was reviewed for connection and collection messages.
+
+**On Windows PowerShell:**
+
+```powershell
+Select-String -Path "C:\Program Files (x86)\ossec-agent\ossec.log" -Pattern "PowerShell/Operational|Connected to the server|Agent is now online|Unable to connect"
+```
+
+Earlier connection failures were present in the log, but later entries showed:
+
+- Analyzing the PowerShell Operational event log
+- Connected to the Wazuh Manager
 - Agent online status
 
-### 6. Conducted PowerShell Testing
+The later entries indicated that the agent was connected and processing the configured event log.
 
-Executed harmless PowerShell commands and a test script to generate activity.
+### 9. Investigate Event Visibility in Wazuh
 
-Observed locally generated Event ID 4104 records in the PowerShell Operational event log.
+In the Wazuh Dashboard, open Threat Hunting / Discover and search for Windows Event ID 4104 using the field:
 
-### 7. Investigated SIEM Visibility
+`data.win.system.eventID:4104`
 
-Attempted to locate Event ID 4104 records in the Wazuh Threat Hunting dashboard.
-
-Although PowerShell logging was enabled and the agent was configured to collect the PowerShell Operational channel, the corresponding events were not successfully confirmed in the dashboard during this lab.
+The dashboard was checked with a recent time range (60 minutes). The search did not return the expected 4104 events during this lab.
 
 ## Findings
 
-- PowerShell Script Block Logging was enabled through the Windows Registry.
-- Event ID 4104 was observed locally in Windows Event Viewer.
-- The Wazuh Windows Agent was configured to collect PowerShell Operational logs.
-- Wazuh Agent connectivity was verified.
-- Event visibility within the Wazuh dashboard was not confirmed.
+- PowerShell Script Block Logging was enabled through the Registry.
+- The PowerShell Operational log was enabled.
+- Local Event ID 4104 records were observed.
+- Wazuh agent configuration was updated to collect the PowerShell Operational channel.
+- The Wazuh agent service was restarted and verified running.
+- Agent connectivity and analysis of the PowerShell Operational channel were observed in the agent log.
+- Event ID 4104 visibility in the Wazuh dashboard was not confirmed.
+
+## Troubleshooting Notes
+
+- Earlier agent log entries showed connection errors to the manager, but later log entries showed a successful connection and the agent online.
+- The dashboard search for `data.win.system.eventID:4104` did not return results.
+- Local 4104 records were inspected, but the specific test string was not confirmed.
+- Troubleshooting was stopped without claiming successful SIEM ingestion of the test event.
 
 ## Learning Outcome
 
-This lab provided hands-on exposure to Windows PowerShell logging, Windows Registry policy configuration, event log collection, Wazuh agent configuration, and SIEM troubleshooting.
+This lab provided practice with Windows Registry policy configuration, PowerShell Script Block Logging, Windows Event ID 4104, Wazuh agent configuration, event-channel collection, agent connectivity checks, and SIEM investigation.
 
-I learned that generating security events on an endpoint does not automatically guarantee that the events are visible within the SIEM. Log collection, forwarding, and dashboard visibility must also be verified.
-
-**Status:** Configuration and local event generation verified; SIEM event visibility requires further investigation.
+**Status:** PowerShell logging and Wazuh collection configuration were completed and locally/agent-side verified. Dashboard visibility of the test events remains unconfirmed.
