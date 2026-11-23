@@ -234,7 +234,7 @@ Remove-ADGroupMember -Identity "Domain Admins" -Members "SOC-TestUser" -Confirm:
 
 This was performed to undo the simulated privilege change.
 
-### Step 14 — Verify the Removal
+### Step 14 — Verify the Removal in Active Directory
 
 The group membership was checked again:
 
@@ -248,6 +248,32 @@ The resulting output showed only:
 
 SOC-TestUser was no longer listed, confirming the removal.
 
+### Step 15 — Investigate the Removal Event in Wazuh
+
+The removal of SOC-TestUser from Domain Admins was also verified in Wazuh Threat Hunting using the query:
+
+```
+data.win.system.eventID:4729
+```
+
+The observed event details included:
+
+- **Event ID:** 4729
+- **Action:** Member removed from a security-enabled global group
+- **Member removed:** SOC-TestUser
+- **Target group:** Domain Admins
+- **Actor:** Administrator
+- **Domain:** RENZZOLAB
+- **Computer:** `kimchi.renzzolab.local`
+- **Agent name:** `kimchi`
+- **Agent IP:** `208.8.8.100`
+
+The event showed the member name as:
+
+`CN=SOC-TestUser,CN=Users,DC=renzzolab,DC=local`
+
+The removal event confirmed that the change was recorded in the Windows Security log and visible in Wazuh.
+
 ---
 
 ## 5. Wazuh Events Investigated
@@ -258,7 +284,7 @@ SOC-TestUser was no longer listed, confirming the removal.
 | 4722 | User account enabled | Observed |
 | 4738 | User account changed | Observed |
 | 4625 | Failed logon attempt | Observed |
-| 4728 | Member added to security-enabled global group | Observed |
+| 4728 | Member added to security-enabled global group | Observed |\n| 4729 | Member removed from security-enabled global group | Observed |
 
 ### Wazuh Rules Observed
 
@@ -375,6 +401,18 @@ Remove-ADGroupMember -Identity "Domain Admins" -Members "SOC-TestUser" -Confirm:
 ```powershell
 Get-ADGroupMember "Domain Admins"
 ```
+
+---
+
+### Investigate Group Membership Removal in Wazuh
+
+Wazuh Threat Hunting query used:
+
+```
+data.win.system.eventID:4729
+```
+
+This query filters Windows Security events for member-removal events from security-enabled global groups.
 
 ---
 
